@@ -15,6 +15,8 @@ Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* r
     retVal->cameraClass = cameraClass;
     retVal->ringBuffer = ringBuffer;
     retVal->error = error;
+
+    return retVal;
 }
 
 gpointer grab_func(gpointer data)
@@ -58,11 +60,15 @@ int main()
     gdouble fps;
 
     g_object_get (camera,
-              "roi-width", &width,
-              "roi-height", &height,
-              "sensor-bitdepth", &bitdepth,
-              "frames-per-second", &fps,
-              NULL);
+                  "roi-width", &width,
+                  "roi-height", &height,
+                  "sensor-bitdepth", &bitdepth,
+                  "frames-per-second", &fps, // default is 20
+                  NULL);
+
+    g_object_set (camera,
+                  "frames-per-second", fps * 3,
+                  NULL);
 
     pixel_size = bitdepth <= 8 ? 1 : 2;
   
@@ -70,16 +76,16 @@ int main()
     
     uca_camera_start_recording(camera, NULL);
     IS_RECORDING = TRUE;
-    
+
     GThread* thread = g_thread_new("grab_frames", grab_func, params_new(camera, class, rb, error));
-    
+
     sleep(10);
 
     IS_RECORDING = FALSE;
     g_thread_join(thread);
     uca_camera_stop_recording(camera, NULL);
 
-    printf("%2d\n", FRAME_COUNT / 10);
+    printf("%d\n", FRAME_COUNT / 10);
 
     // dispose stuff
     g_object_unref(camera);
