@@ -50,9 +50,18 @@ gboolean ring_buffer_add(RingBuffer* self, const gpointer item)
     return TRUE;
 }
 
-gpointer ring_buffer_get(RingBuffer* self)
+gpointer ring_buffer_get_write(RingBuffer* self)
 {
-    return self->buffer + self->index * self->itemSize;
+    self->head += self->itemSize;
+    if (self->head == self->end)
+    {
+        self->head = self->buffer;
+        if (self->tail == self->head)
+        {
+            self->tail += self->itemSize;
+        }
+    }
+    return self->head - self->itemSize;
 }
 
 void ring_buffer_advance(RingBuffer* self, gsize count)
@@ -61,8 +70,16 @@ void ring_buffer_advance(RingBuffer* self, gsize count)
     {
         self->head += self->itemSize;
         if (self->head == self->end)
+        {
+            // write pointer reached end, write from start again
             self->head = self->buffer;
+
+            if (self->tail == self->head)
+            {
+                // writing was faster than reading, so force advance read pointer
+                self->tail += self->itemSize;
+            }
+        }
     }
-    self->index += count;
 }
 

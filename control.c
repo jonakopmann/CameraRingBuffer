@@ -4,8 +4,9 @@
 #include <sys/time.h>
 
 gsize BUFFER_CAPACITY = 0x1000;
-gboolean IS_RECORDING = FALSE;
+gboolean IsRecording = FALSE;
 gsize FRAME_COUNT = 0;
+GMutex mutex;
 
 Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* ringBuffer, GError* error)
 {
@@ -22,10 +23,17 @@ Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* r
 gpointer grab_func(gpointer data)
 {
     Params* params = (Params*)data;
-    while (IS_RECORDING)
+    while (IsRecording)
     {
-        gboolean result = (*(params->cameraClass)->grab) (params->camera, (params->ringBuffer)->head, &(params->error));
-        ring_buffer_advance(params->ringBuffer, 1);
+        g_mutex_lock(&mutex);
+
+        if (!(*(params->cameraClass)->grab) (params->camera, ring_buffer_get_write(params->ringBuffer), &(params->error)))
+        {
+            IsRecording = FALSE;
+            break;
+        }
+
+        g_mutex_unlock(&mutex);
         FRAME_COUNT++;
     }
 }
@@ -75,19 +83,19 @@ int main()
     rb = ring_buffer_new(BUFFER_CAPACITY, width * height * pixel_size);
     
     uca_camera_start_recording(camera, NULL);
-    IS_RECORDING = TRUE;
+    IsRecording = TRUE;
 
     GThread* thread = g_thread_new("grab_frames", grab_func, params_new(camera, class, rb, error));
 
     sleep(10);
 
-    IS_RECORDING = FALSE;
+    IsRecording = FALSE;
     g_thread_join(thread);
     uca_camera_stop_recording(camera, NULL);
 
     printf("%d\n", FRAME_COUNT / 10);
 
-    // dispose stuff
+    // dispose camera and ringbuffer
     g_object_unref(camera);
     ring_buffer_dispose(rb);
     

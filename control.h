@@ -6,7 +6,7 @@
 #include <glib-2.0/glib-object.h>
 #include <uca/uca-plugin-manager.h>
 #include <uca/uca-camera.h>
-#include "ringbuffer/RingBuffer.h"
+#include "RingBuffer/RingBuffer.h"
 
 G_BEGIN_DECLS
 
