@@ -6,7 +6,6 @@
 gsize BUFFER_CAPACITY = 0x1000;
 gboolean IsRecording = FALSE;
 gsize FRAME_COUNT = 0;
-GMutex mutex;
 
 Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* ringBuffer, GError* error)
 {
@@ -20,22 +19,25 @@ Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* r
     return retVal;
 }
 
-gpointer grab_func(gpointer data)
+gpointer write_func(gpointer data)
 {
     Params* params = (Params*)data;
     while (IsRecording)
     {
-        g_mutex_lock(&mutex);
-
         if (!(*(params->cameraClass)->grab) (params->camera, ring_buffer_get_write(params->ringBuffer), &(params->error)))
         {
             IsRecording = FALSE;
             break;
         }
-
-        g_mutex_unlock(&mutex);
         FRAME_COUNT++;
     }
+}
+
+gpointer read_func(gpointer data)
+{
+    RingBuffer* ringBuffer = (RingBuffer*)data;
+
+    gpointer test = ring_buffer_get_read(ringBuffer);
 }
 
 int main()
@@ -44,7 +46,6 @@ int main()
     UcaPluginManager* manager;
     UcaCamera* camera;
     UcaCameraClass* class;
-    RingBuffer* rb;
     
     GError* error = NULL;
     
@@ -80,24 +81,24 @@ int main()
 
     pixel_size = bitdepth <= 8 ? 1 : 2;
   
-    rb = ring_buffer_new(BUFFER_CAPACITY, width * height * pixel_size);
+    RingBuffer* rb = ring_buffer_new(BUFFER_CAPACITY, width * height * pixel_size);
     
     uca_camera_start_recording(camera, NULL);
     IsRecording = TRUE;
 
-    GThread* thread = g_thread_new("grab_frames", grab_func, params_new(camera, class, rb, error));
+    GThread* thread = g_thread_new("grab_frames", write_func, params_new(camera, class, rb, error));
 
-    sleep(10);
+    sleep(5);
 
     IsRecording = FALSE;
     g_thread_join(thread);
     uca_camera_stop_recording(camera, NULL);
 
-    printf("%d\n", FRAME_COUNT / 10);
+    printf("%d\n", FRAME_COUNT / 5);
 
-    // dispose camera and ringbuffer
+    // free camera and ringbuffer
     g_object_unref(camera);
-    ring_buffer_dispose(rb);
+    ring_buffer_free(rb);
     
     return 0;
 }

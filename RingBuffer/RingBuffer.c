@@ -14,72 +14,121 @@ RingBuffer* ring_buffer_new(gsize capacity, gsize itemSize)
 {
     RingBuffer* self = g_malloc(sizeof(RingBuffer));
     
-    self->buffer = g_malloc0(capacity * itemSize);
-    self->end = self->buffer + capacity * itemSize;
+    self->start = g_malloc0(capacity * itemSize);
+    self->end = self->start + capacity * itemSize;
+    self->head = self->start;
+    self->tail = self->start;
+
     self->capacity = capacity;
     self->itemSize = itemSize;
     self->index = 0;
-    self->head = self->buffer;
-  
+    self->flags = 0;
+
+    g_mutex_init(&self->readLock);
+    g_mutex_init(&self->writeLock);
+
+    g_cond_init(&self->isNotEmpty);
+
     return self;
 }
 
-void ring_buffer_dispose(RingBuffer* self)
+void ring_buffer_free(RingBuffer* self)
 {
-    g_free(self->buffer);
-    self->capacity = 0;
-    self->index = 0;
-}
+    g_free(self->start);
 
-gboolean ring_buffer_add(RingBuffer* self, const gpointer item)
-{
-    if (self == NULL)
-    {
-        return FALSE;
-    }
-    if (self->head == self->end)
-    {
-        self->head = self->buffer;
-    }
-    
-    self->head = memcpy(self->head, item, self->itemSize);
-    
-    self->head += self->itemSize;
-    self->index++;
-    
-    return TRUE;
+    // depracted idk need to look into what i need to use instead
+    //g_mutex_free(&self->readLock);
+    //g_mutex_free(&self->writeLock);
+
+    //g_cond_free(&self->isNotEmpty);
 }
 
 gpointer ring_buffer_get_write(RingBuffer* self)
 {
-    self->head += self->itemSize;
-    if (self->head == self->end)
+    g_mutex_lock(&self->writeLock);
+
+    if (self->flags & 1)
     {
-        self->head = self->buffer;
-        if (self->tail == self->head)
-        {
-            self->tail += self->itemSize;
-        }
+        // writing was faster than reading, so force advance read pointer
+        g_mutex_lock(&self->readLock);
+
+        ring_buffer_advance(self, FALSE);
+
+        g_mutex_unlock(&self->readLock);
+
+        // reset flag
+        self->flags &= ~1;
     }
+
+    ring_buffer_advance(self, TRUE);
+
+    if (self->head == self->tail)
+    {
+        self->flags |= 1 << 0;
+    }
+    else
+    {
+        // clear flags
+        self->flags &= 3;
+    }
+
+    g_cond_signal(&self->isNotEmpty);
+
+    g_mutex_unlock(&self->writeLock);
+
     return self->head - self->itemSize;
 }
 
-void ring_buffer_advance(RingBuffer* self, gsize count)
+gpointer ring_buffer_get_read(RingBuffer* self)
 {
-    for (gsize i = 0; i < count; i++)
+    g_mutex_lock(&(self->readLock));
+
+    if (self->flags & 2)
+    {
+        // reading was faster than writing, we need to wait
+        g_cond_wait(&self->isNotEmpty, &self->readLock);
+
+        // reset flag
+        self->flags &= ~2;
+    }
+
+    ring_buffer_advance(self, FALSE);
+
+    if (self->tail == self->head)
+    {
+        self->flags |= 1 << 1;
+    }
+    else
+    {
+        // clear flags
+        self->flags &= 3;
+    }
+
+    g_mutex_unlock(&self->readLock);
+
+    return self->tail - self->itemSize;
+}
+
+void ring_buffer_advance(RingBuffer* self, gboolean isWrite)
+{
+    if (isWrite)
     {
         self->head += self->itemSize;
+
         if (self->head == self->end)
         {
-            // write pointer reached end, write from start again
-            self->head = self->buffer;
+            // ptr reached the end, go back to start
+            self->head = self->start;
+        }
+    }
+    else
+    {
+        self->tail += self->itemSize;
 
-            if (self->tail == self->head)
-            {
-                // writing was faster than reading, so force advance read pointer
-                self->tail += self->itemSize;
-            }
+        if (self->tail == self->end)
+        {
+            // ptr reached the end, go back to start
+            self->tail = self->start;
         }
     }
 }
-

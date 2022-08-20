@@ -14,24 +14,34 @@ G_DECLARE_FINAL_TYPE (RingBuffer, ring_buffer, RING, BUFFER, GObject)
 
 struct _RingBuffer
 {
-  gpointer buffer;
+  gpointer start;
   gpointer head;
+
   gpointer tail;
   gpointer end;
-  gsize capacity;
-  gsize itemSize;
-  gsize index;
+  
+  gulong capacity;
+  gulong itemSize;
+  glong index;
+  guint32 flags;
+
+  GMutex readLock;
+  GMutex writeLock;
+
+  GCond isNotEmpty;
 };
 
 RingBuffer* ring_buffer_new     (gsize capacity, gsize itemSize);
 
 gboolean ring_buffer_add        (RingBuffer* self, const gpointer item);
 
-void ring_buffer_advance        (RingBuffer* self, gsize count);
+void ring_buffer_advance        (RingBuffer* self, gboolean iswrite);
 
 gpointer ring_buffer_get_write  (RingBuffer* self);
 
-void ring_buffer_dispose        (RingBuffer* self);
+gpointer ring_buffer_get_read   (RingBuffer* self);
+
+void ring_buffer_free        (RingBuffer* self);
 
 G_END_DECLS
 
