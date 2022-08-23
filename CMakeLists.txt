@@ -1,15 +1,13 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(CameraRingbuffer)
+project(CameraRingbuffer
+        VERSION 1.0.0)
 
-set(control_files control.c control.h)
-
-include_directories(RingBuffer)
-link_directories(RingBuffer)
-
-add_subdirectory(RingBuffer)
+set(control_files src/control.c src/RingBuffer.c)
 
 add_executable(RingbufferControl ${control_files})
+
+target_include_directories(RingbufferControl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 find_package(PkgConfig)
 pkg_check_modules(LIBUCA libuca REQUIRED)
@@ -31,6 +29,7 @@ set(DEPS
     ${GLIB2_LIBRARIES}
     ${GOBJECT2_LIBRARIES}
     ${GMODULE2_LIBRARIES}
-    ${LIBUCA_LIBRARIES})
+    ${LIBUCA_LIBRARIES}
+    )
 
-target_link_libraries(RingbufferControl ${DEPS} RingBuffer)
+target_link_libraries(RingbufferControl PUBLIC ${DEPS} pthread)

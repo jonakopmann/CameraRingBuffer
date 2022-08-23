@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-gsize BUFFER_CAPACITY = 0x1000;
+gsize BUFFER_CAPACITY = 10;
 gboolean IsRecording = FALSE;
 gsize FRAME_COUNT = 0;
 
@@ -22,22 +22,52 @@ Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* r
 gpointer write_func(gpointer data)
 {
     Params* params = (Params*)data;
-    while (IsRecording)
+    /*int* ptr = g_malloc(sizeof(int));
+    *ptr = 13;
+    for (int i = 0; i < 13; i++)
     {
+        (*ptr)++;
+        g_mutex_lock(&params->ringBuffer->writeLock);
+        gpointer writePtr = ring_buffer_get_write(params->ringBuffer);
+        g_memmove(writePtr, ptr, sizeof(int));
+
+        sem_post(&params->ringBuffer->items);
+        sleep(1);
+        g_mutex_unlock(&params->ringBuffer->writeLock);
+    }
+
+    g_free(ptr);*/
+
+    for (int i = 0; i < 5; i++)
+    {
+        printf("write frame %d\n", i);
         if (!(*(params->cameraClass)->grab) (params->camera, ring_buffer_get_write(params->ringBuffer), &(params->error)))
         {
             IsRecording = FALSE;
             break;
         }
+        sem_post(&params->ringBuffer->items);
         FRAME_COUNT++;
     }
+    g_free(data);
 }
 
 gpointer read_func(gpointer data)
 {
     RingBuffer* ringBuffer = (RingBuffer*)data;
-
+    //sleep(1);
+    printf("read thread started\n");
+    /*for (int i = 0; i < 3; i++)
+    {
+        gpointer test = ring_buffer_get_read(ringBuffer);
+        printf("result: %lu\n", *(u_int64_t*)test);
+    }*/
     gpointer test = ring_buffer_get_read(ringBuffer);
+    FILE* file;
+
+    file = fopen("test", "w");
+    
+    fwrite(test, ringBuffer->itemSize, 1, file);
 }
 
 int main()
@@ -69,15 +99,16 @@ int main()
     gdouble fps;
 
     g_object_get (camera,
-                  "roi-width", &width,
-                  "roi-height", &height,
-                  "sensor-bitdepth", &bitdepth,
-                  "frames-per-second", &fps, // default is 20
-                  NULL);
+        "roi-width", &width,
+        "roi-height", &height,
+        "sensor-bitdepth", &bitdepth,
+        "frames-per-second", &fps, // default is 20
+        NULL);
 
     g_object_set (camera,
-                  "frames-per-second", fps * 3,
-                  NULL);
+        "frames-per-second", fps * 3,
+        "fill-data", TRUE,
+        NULL);
 
     pixel_size = bitdepth <= 8 ? 1 : 2;
   
@@ -86,15 +117,17 @@ int main()
     uca_camera_start_recording(camera, NULL);
     IsRecording = TRUE;
 
-    GThread* thread = g_thread_new("grab_frames", write_func, params_new(camera, class, rb, error));
+    GThread* writeThread = g_thread_new("write_frames", write_func, params_new(camera, class, rb, error));
+    GThread* readThread = g_thread_new("read_frames", read_func, rb);
 
-    sleep(5);
+    //sleep(5);
 
     IsRecording = FALSE;
-    g_thread_join(thread);
+    g_thread_join(writeThread);
+    g_thread_join(readThread);
     uca_camera_stop_recording(camera, NULL);
 
-    printf("%d\n", FRAME_COUNT / 5);
+    //printf("%d\n", FRAME_COUNT / 5);
 
     // free camera and ringbuffer
     g_object_unref(camera);

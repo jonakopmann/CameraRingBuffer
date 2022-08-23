@@ -5,6 +5,7 @@
 
 #include <glib-2.0/glib-object.h>
 #include <stdio.h>
+#include <semaphore.h>
 
 G_BEGIN_DECLS
 
@@ -23,12 +24,13 @@ struct _RingBuffer
   gulong capacity;
   gulong itemSize;
   glong index;
-  guint32 flags;
+  gboolean canWrite;
+  gboolean canRead;
 
   GMutex readLock;
   GMutex writeLock;
-
-  GCond isNotEmpty;
+  
+  sem_t items;
 };
 
 RingBuffer* ring_buffer_new     (gsize capacity, gsize itemSize);

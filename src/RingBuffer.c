@@ -22,12 +22,13 @@ RingBuffer* ring_buffer_new(gsize capacity, gsize itemSize)
     self->capacity = capacity;
     self->itemSize = itemSize;
     self->index = 0;
-    self->flags = 0;
+    self->canWrite = TRUE;
+    self->canRead = FALSE;
 
     g_mutex_init(&self->readLock);
     g_mutex_init(&self->writeLock);
 
-    g_cond_init(&self->isNotEmpty);
+    sem_init(&self->items, 0, 0);
 
     return self;
 }
@@ -35,74 +36,51 @@ RingBuffer* ring_buffer_new(gsize capacity, gsize itemSize)
 void ring_buffer_free(RingBuffer* self)
 {
     g_free(self->start);
-
+    
     // depracted idk need to look into what i need to use instead
-    //g_mutex_free(&self->readLock);
-    //g_mutex_free(&self->writeLock);
+    printf("lock\n");
+    g_mutex_free(&self->readLock);
+    g_mutex_free(&self->writeLock);
 
-    //g_cond_free(&self->isNotEmpty);
+    sem_destroy(&self->items);
 }
 
 gpointer ring_buffer_get_write(RingBuffer* self)
 {
     g_mutex_lock(&self->writeLock);
-
-    if (self->flags & 1)
+    
+    ring_buffer_advance(self, TRUE);
+    printf("write\n");
+    
+    int* itemCount = g_malloc0(sizeof(int));
+    sem_getvalue(&self->items, itemCount);
+    if ((self->head == self->tail) && *itemCount)
     {
         // writing was faster than reading, so force advance read pointer
+        printf("writing was faster\n");
         g_mutex_lock(&self->readLock);
+
+        sem_wait(&self->items);
 
         ring_buffer_advance(self, FALSE);
 
         g_mutex_unlock(&self->readLock);
-
-        // reset flag
-        self->flags &= ~1;
     }
 
-    ring_buffer_advance(self, TRUE);
-
-    if (self->head == self->tail)
-    {
-        self->flags |= 1 << 0;
-    }
-    else
-    {
-        // clear flags
-        self->flags &= 3;
-    }
-
-    g_cond_signal(&self->isNotEmpty);
-
-    g_mutex_unlock(&self->writeLock);
+    g_free(itemCount);
+    
+    g_mutex_lock(&self->writeLock);
 
     return self->head - self->itemSize;
 }
 
 gpointer ring_buffer_get_read(RingBuffer* self)
 {
-    g_mutex_lock(&(self->readLock));
+    g_mutex_lock(&self->readLock);
 
-    if (self->flags & 2)
-    {
-        // reading was faster than writing, we need to wait
-        g_cond_wait(&self->isNotEmpty, &self->readLock);
-
-        // reset flag
-        self->flags &= ~2;
-    }
+    sem_wait(&self->items);
 
     ring_buffer_advance(self, FALSE);
-
-    if (self->tail == self->head)
-    {
-        self->flags |= 1 << 1;
-    }
-    else
-    {
-        // clear flags
-        self->flags &= 3;
-    }
 
     g_mutex_unlock(&self->readLock);
 
