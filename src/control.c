@@ -19,34 +19,45 @@ Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* r
     return retVal;
 }
 
+void writeToBuffer(gpointer buffer)
+{
+    gpointer ptr = g_malloc0(sizeof(u_int64_t));
+    memcpy(buffer, ptr, sizeof(u_int64_t));
+
+    g_free(ptr);
+}
+
 gpointer write_func(gpointer data)
 {
     Params* params = (Params*)data;
-    /*int* ptr = g_malloc(sizeof(int));
-    *ptr = 13;
-    for (int i = 0; i < 13; i++)
-    {
-        (*ptr)++;
-        g_mutex_lock(&params->ringBuffer->writeLock);
-        gpointer writePtr = ring_buffer_get_write(params->ringBuffer);
-        g_memmove(writePtr, ptr, sizeof(int));
 
+    // simple test loop
+    /*for (int i = 0; i < 10; i++)
+    {
+        g_mutex_lock(&params->ringBuffer->writeLock);
+        printf("head%d: %lx\n", i, params->ringBuffer->head);
+        gpointer writePtr = ring_buffer_get_write(params->ringBuffer);
+        printf("ptr%d: %lx\n", i, writePtr);
+        writeToBuffer(writePtr);
         sem_post(&params->ringBuffer->items);
-        sleep(1);
         g_mutex_unlock(&params->ringBuffer->writeLock);
     }
+    printf("start: %lx\n", params->ringBuffer->start);
+    printf("end: %lx\n", params->ringBuffer->end);*/
 
-    g_free(ptr);*/
-
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 13; i++)
     {
         printf("write frame %d\n", i);
+        g_mutex_lock(&params->ringBuffer->writeLock);
         if (!(*(params->cameraClass)->grab) (params->camera, ring_buffer_get_write(params->ringBuffer), &(params->error)))
         {
             IsRecording = FALSE;
+            g_mutex_unlock(&params->ringBuffer->writeLock);
             break;
         }
         sem_post(&params->ringBuffer->items);
+        g_mutex_unlock(&params->ringBuffer->writeLock);
+        //sleep(2);
         FRAME_COUNT++;
     }
     g_free(data);
@@ -55,19 +66,20 @@ gpointer write_func(gpointer data)
 gpointer read_func(gpointer data)
 {
     RingBuffer* ringBuffer = (RingBuffer*)data;
-    //sleep(1);
-    printf("read thread started\n");
-    /*for (int i = 0; i < 3; i++)
-    {
-        gpointer test = ring_buffer_get_read(ringBuffer);
-        printf("result: %lu\n", *(u_int64_t*)test);
-    }*/
-    gpointer test = ring_buffer_get_read(ringBuffer);
-    FILE* file;
+    
+    g_mutex_lock(&ringBuffer->readLock);
 
+    gpointer test = ring_buffer_get_read(ringBuffer);
+
+    FILE* file;
     file = fopen("test", "w");
     
     fwrite(test, ringBuffer->itemSize, 1, file);
+    printf("wrote file\n");
+
+    g_mutex_unlock(&ringBuffer->readLock);
+
+    fclose(file);
 }
 
 int main()
@@ -97,6 +109,7 @@ int main()
     guint pixel_size;
     gdouble exposure_time;
     gdouble fps;
+    gboolean fillData;
 
     g_object_get (camera,
         "roi-width", &width,
@@ -107,11 +120,9 @@ int main()
 
     g_object_set (camera,
         "frames-per-second", fps * 3,
-        "fill-data", TRUE,
         NULL);
 
     pixel_size = bitdepth <= 8 ? 1 : 2;
-  
     RingBuffer* rb = ring_buffer_new(BUFFER_CAPACITY, width * height * pixel_size);
     
     uca_camera_start_recording(camera, NULL);
@@ -130,8 +141,8 @@ int main()
     //printf("%d\n", FRAME_COUNT / 5);
 
     // free camera and ringbuffer
-    g_object_unref(camera);
     ring_buffer_free(rb);
+    g_object_unref(camera);
     
     return 0;
 }

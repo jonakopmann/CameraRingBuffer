@@ -13,17 +13,14 @@ static void ring_buffer_init(RingBuffer* klass)
 RingBuffer* ring_buffer_new(gsize capacity, gsize itemSize)
 {
     RingBuffer* self = g_malloc(sizeof(RingBuffer));
-    
-    self->start = g_malloc0(capacity * itemSize);
+    printf("size: %d\n", capacity * itemSize);
+    self->start = g_malloc(capacity * itemSize);
     self->end = self->start + capacity * itemSize;
     self->head = self->start;
     self->tail = self->start;
 
     self->capacity = capacity;
     self->itemSize = itemSize;
-    self->index = 0;
-    self->canWrite = TRUE;
-    self->canRead = FALSE;
 
     g_mutex_init(&self->readLock);
     g_mutex_init(&self->writeLock);
@@ -38,26 +35,23 @@ void ring_buffer_free(RingBuffer* self)
     g_free(self->start);
     
     // depracted idk need to look into what i need to use instead
-    printf("lock\n");
-    g_mutex_free(&self->readLock);
-    g_mutex_free(&self->writeLock);
+    g_mutex_clear(&self->readLock);
+    g_mutex_clear(&self->writeLock);
 
     sem_destroy(&self->items);
 }
 
 gpointer ring_buffer_get_write(RingBuffer* self)
 {
-    g_mutex_lock(&self->writeLock);
+    gpointer retVal = self->head;
     
     ring_buffer_advance(self, TRUE);
-    printf("write\n");
     
     int* itemCount = g_malloc0(sizeof(int));
     sem_getvalue(&self->items, itemCount);
     if ((self->head == self->tail) && *itemCount)
     {
         // writing was faster than reading, so force advance read pointer
-        printf("writing was faster\n");
         g_mutex_lock(&self->readLock);
 
         sem_wait(&self->items);
@@ -68,23 +62,19 @@ gpointer ring_buffer_get_write(RingBuffer* self)
     }
 
     g_free(itemCount);
-    
-    g_mutex_lock(&self->writeLock);
 
-    return self->head - self->itemSize;
+    return retVal;
 }
 
 gpointer ring_buffer_get_read(RingBuffer* self)
 {
-    g_mutex_lock(&self->readLock);
-
+    gpointer retVal = self->head;
+    
     sem_wait(&self->items);
 
     ring_buffer_advance(self, FALSE);
 
-    g_mutex_unlock(&self->readLock);
-
-    return self->tail - self->itemSize;
+    return retVal;
 }
 
 void ring_buffer_advance(RingBuffer* self, gboolean isWrite)

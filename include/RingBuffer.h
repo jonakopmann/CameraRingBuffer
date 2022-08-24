@@ -23,9 +23,6 @@ struct _RingBuffer
   
   gulong capacity;
   gulong itemSize;
-  glong index;
-  gboolean canWrite;
-  gboolean canRead;
 
   GMutex readLock;
   GMutex writeLock;
