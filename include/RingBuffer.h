@@ -5,7 +5,13 @@
 
 #include <glib-2.0/glib-object.h>
 #include <stdio.h>
-#include <semaphore.h>
+#include <stdatomic.h>
+
+typedef struct _Item
+{
+  gpointer data;
+  atomic_bool isSetting;
+} Item;
 
 G_BEGIN_DECLS
 
@@ -15,32 +21,24 @@ G_DECLARE_FINAL_TYPE (RingBuffer, ring_buffer, RING, BUFFER, GObject)
 
 struct _RingBuffer
 {
-  gpointer start;
-  gpointer head;
+  Item* items;
+  gpointer data;
 
-  gpointer tail;
-  gpointer end;
-  
   gulong capacity;
   gulong itemSize;
 
-  GMutex readLock;
-  GMutex writeLock;
-  
-  sem_t items;
+  atomic_long writeIndex;
+  atomic_long maxReadIndex;
+  gulong* readIndices;
 };
 
-RingBuffer* ring_buffer_new     (gsize capacity, gsize itemSize);
+RingBuffer* ring_buffer_new     (gsize capacity, gsize itemSize, gsize readerCount);
 
-gboolean ring_buffer_add        (RingBuffer* self, const gpointer item);
+Item* ring_buffer_get_write     (RingBuffer* self);
 
-void ring_buffer_advance        (RingBuffer* self, gboolean iswrite);
+gpointer ring_buffer_get_read   (RingBuffer* self, gsize index);
 
-gpointer ring_buffer_get_write  (RingBuffer* self);
-
-gpointer ring_buffer_get_read   (RingBuffer* self);
-
-void ring_buffer_free        (RingBuffer* self);
+void ring_buffer_free           (RingBuffer* self);
 
 G_END_DECLS
 

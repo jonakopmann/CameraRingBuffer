@@ -1,4 +1,4 @@
-#include "control.h"
+#include "Control.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/time.h>
@@ -31,7 +31,6 @@ gpointer write_func(gpointer data)
 {
     Params* params = (Params*)data;
 
-    // simple test loop
     /*for (int i = 0; i < 10; i++)
     {
         g_mutex_lock(&params->ringBuffer->writeLock);
@@ -44,20 +43,18 @@ gpointer write_func(gpointer data)
     }
     printf("start: %lx\n", params->ringBuffer->start);
     printf("end: %lx\n", params->ringBuffer->end);*/
-
-    for (int i = 0; i < 13; i++)
+    gint i;
+    for (i = 0; i < 13; i++)
     {
         printf("write frame %d\n", i);
-        g_mutex_lock(&params->ringBuffer->writeLock);
-        if (!(*(params->cameraClass)->grab) (params->camera, ring_buffer_get_write(params->ringBuffer), &(params->error)))
+        Item* item = ring_buffer_get_write(params->ringBuffer);
+        if (!(*(params->cameraClass)->grab) (params->camera, item->data, &(params->error)))
         {
             IsRecording = FALSE;
-            g_mutex_unlock(&params->ringBuffer->writeLock);
+            item->isSetting = FALSE;
             break;
         }
-        sem_post(&params->ringBuffer->items);
-        g_mutex_unlock(&params->ringBuffer->writeLock);
-        //sleep(2);
+        item->isSetting = FALSE;
         FRAME_COUNT++;
     }
     g_free(data);
@@ -66,18 +63,18 @@ gpointer write_func(gpointer data)
 gpointer read_func(gpointer data)
 {
     RingBuffer* ringBuffer = (RingBuffer*)data;
-    
-    g_mutex_lock(&ringBuffer->readLock);
-
-    gpointer test = ring_buffer_get_read(ringBuffer);
 
     FILE* file;
-    file = fopen("test", "w");
+    file = fopen("test.raw", "w");
+
+    gpointer test = NULL;
+    while (!test)
+    {
+        test = ring_buffer_get_read(ringBuffer, 0);
+    }
     
     fwrite(test, ringBuffer->itemSize, 1, file);
     printf("wrote file\n");
-
-    g_mutex_unlock(&ringBuffer->readLock);
 
     fclose(file);
 }
@@ -123,7 +120,7 @@ int main()
         NULL);
 
     pixel_size = bitdepth <= 8 ? 1 : 2;
-    RingBuffer* rb = ring_buffer_new(BUFFER_CAPACITY, width * height * pixel_size);
+    RingBuffer* rb = ring_buffer_new(BUFFER_CAPACITY, width * height * pixel_size, 1);
     
     uca_camera_start_recording(camera, NULL);
     IsRecording = TRUE;

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 project(CameraRingbuffer
         VERSION 1.0.0)
 
-set(control_files src/control.c src/RingBuffer.c)
+set(control_files src/Control.c src/RingBuffer.c)
 
 add_executable(RingbufferControl ${control_files})
 
