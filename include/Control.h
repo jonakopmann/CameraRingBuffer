@@ -26,4 +26,21 @@ Params* params_new (UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* 
 
 G_END_DECLS
 
+G_BEGIN_DECLS
+
+#define READ_PARAMS_TYPE_ (read_params_get_type())
+
+G_DECLARE_FINAL_TYPE (ReadParams, readparams, READ, PARAMS, GObject)
+
+
+struct _ReadParams
+{
+    RingBuffer* ringBuffer;
+    gint index;
+};
+
+ReadParams* readParams_new (RingBuffer* ringBuffer, gint index);
+
+G_END_DECLS
+
 #endif

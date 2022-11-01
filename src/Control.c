@@ -1,6 +1,5 @@
 #include "Control.h"
 #include <stdio.h>
-#include <unistd.h>
 #include <sys/time.h>
 
 gsize BUFFER_CAPACITY = 10;
@@ -19,6 +18,15 @@ Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* r
     return retVal;
 }
 
+ReadParams* readParams_new (RingBuffer* ringBuffer, gint index)
+{
+    ReadParams* retVal = g_malloc(sizeof(ReadParams));
+
+    retVal->ringBuffer = ringBuffer;
+    retVal->index = index;
+    return retVal;
+}
+
 void writeToBuffer(gpointer buffer)
 {
     gpointer ptr = g_malloc0(sizeof(u_int64_t));
@@ -30,21 +38,8 @@ void writeToBuffer(gpointer buffer)
 gpointer write_func(gpointer data)
 {
     Params* params = (Params*)data;
-
-    /*for (int i = 0; i < 10; i++)
-    {
-        g_mutex_lock(&params->ringBuffer->writeLock);
-        printf("head%d: %lx\n", i, params->ringBuffer->head);
-        gpointer writePtr = ring_buffer_get_write(params->ringBuffer);
-        printf("ptr%d: %lx\n", i, writePtr);
-        writeToBuffer(writePtr);
-        sem_post(&params->ringBuffer->items);
-        g_mutex_unlock(&params->ringBuffer->writeLock);
-    }
-    printf("start: %lx\n", params->ringBuffer->start);
-    printf("end: %lx\n", params->ringBuffer->end);*/
-    gint i;
-    for (i = 0; i < 13; i++)
+    
+    for (gint i = 0; i < 13; i++)
     {
         printf("write frame %d\n", i);
         Item* item = ring_buffer_get_write(params->ringBuffer);
@@ -62,21 +57,31 @@ gpointer write_func(gpointer data)
 
 gpointer read_func(gpointer data)
 {
-    RingBuffer* ringBuffer = (RingBuffer*)data;
+    ReadParams* params = (ReadParams*)data;
+    
+    g_mkdir_with_parents("../Images", 0);
 
-    FILE* file;
-    file = fopen("test.raw", "w");
-
-    gpointer test = NULL;
-    while (!test)
+    for (gint i = 0; i < 4; i++)
     {
-        test = ring_buffer_get_read(ringBuffer, 0);
+        gint size = i > 99 ? 18 : i > 9 ? 17 : 16;
+        gchar* path = g_malloc(sizeof(gchar) * size);
+        sprintf(path, "../Images/%d.raw", i);
+        
+        FILE* file;
+        file = fopen(path, "w");
+
+        gpointer test = NULL;
+        while (!test)
+        {
+            test = ring_buffer_get_read(params->ringBuffer, params->index);
+        }
+        
+        fwrite(test, params->ringBuffer->itemSize, 1, file);
+        printf("wrote file\n");
+
+        fclose(file);
     }
     
-    fwrite(test, ringBuffer->itemSize, 1, file);
-    printf("wrote file\n");
-
-    fclose(file);
 }
 
 int main()
@@ -115,6 +120,10 @@ int main()
         "frames-per-second", &fps, // default is 20
         NULL);
 
+    printf("width: %d\n", width);
+    printf("height: %d\n", height);
+    printf("bitdepth: %d\n", bitdepth);
+
     g_object_set (camera,
         "frames-per-second", fps * 3,
         NULL);
@@ -126,16 +135,12 @@ int main()
     IsRecording = TRUE;
 
     GThread* writeThread = g_thread_new("write_frames", write_func, params_new(camera, class, rb, error));
-    GThread* readThread = g_thread_new("read_frames", read_func, rb);
-
-    //sleep(5);
+    GThread* readThread = g_thread_new("read_frames", read_func, readParams_new(rb, 0));
 
     IsRecording = FALSE;
     g_thread_join(writeThread);
     g_thread_join(readThread);
     uca_camera_stop_recording(camera, NULL);
-
-    //printf("%d\n", FRAME_COUNT / 5);
 
     // free camera and ringbuffer
     ring_buffer_free(rb);

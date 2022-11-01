@@ -17,8 +17,7 @@ RingBuffer* ring_buffer_new(gsize capacity, gsize itemSize, gsize readerCount)
     self->items = g_malloc(sizeof(Item) * capacity);
     self->data = g_malloc(capacity * itemSize);
 
-    gint i;
-    for (i = 0; i < capacity; i++)
+    for (gint i = 0; i < capacity; i++)
     {
         self->items[i].data = self->data + (i * itemSize);
     }
@@ -42,7 +41,6 @@ void ring_buffer_free(RingBuffer* self)
 Item* ring_buffer_get_write(RingBuffer* self)
 {
     glong idx = self->writeIndex++;
-    // is this necessary?
 
     idx %= self->capacity;
     self->items[idx].isSetting = TRUE;
@@ -57,6 +55,13 @@ gpointer ring_buffer_get_read(RingBuffer* self, gsize index)
     if (self->readIndices[index] >= self->writeIndex || self->items[idx].isSetting)
     {
         return NULL;
+    }
+    glong diff = self->writeIndex - self->readIndices[index];
+    if (diff> self->capacity)
+    {
+        self->readIndices[index] += diff - self->capacity;
+        idx += diff - self->capacity;
+        idx %= self->capacity;
     }
 
     self->readIndices[index]++;
