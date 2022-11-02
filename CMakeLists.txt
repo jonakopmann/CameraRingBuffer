@@ -3,11 +3,19 @@ cmake_minimum_required(VERSION 3.10)
 project(CameraRingbuffer
         VERSION 1.0.0)
 
-set(control_files src/Control.c src/RingBuffer.c)
+set(control_files src/Control.c src/SharedMemory.c)
+
+set(producer_files src/Producer.c src/SharedMemory.c)
+set(consumer_files src/Consumer.c src/SharedMemory.c)
 
 add_executable(RingbufferControl ${control_files})
 
+add_executable(Producer ${producer_files})
+add_executable(Consumer ${consumer_files})
+
 target_include_directories(RingbufferControl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(Producer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(Consumer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 find_package(PkgConfig)
 pkg_check_modules(LIBUCA libuca REQUIRED)

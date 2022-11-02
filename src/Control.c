@@ -6,27 +6,6 @@ gsize BUFFER_CAPACITY = 10;
 gboolean IsRecording = FALSE;
 gsize FRAME_COUNT = 0;
 
-Params* params_new(UcaCamera* camera, UcaCameraClass* cameraClass, RingBuffer* ringBuffer, GError* error)
-{
-    Params* retVal = g_malloc(sizeof(Params));
-    
-    retVal->camera = camera;
-    retVal->cameraClass = cameraClass;
-    retVal->ringBuffer = ringBuffer;
-    retVal->error = error;
-
-    return retVal;
-}
-
-ReadParams* readParams_new (RingBuffer* ringBuffer, gint index)
-{
-    ReadParams* retVal = g_malloc(sizeof(ReadParams));
-
-    retVal->ringBuffer = ringBuffer;
-    retVal->index = index;
-    return retVal;
-}
-
 void writeToBuffer(gpointer buffer)
 {
     gpointer ptr = g_malloc0(sizeof(u_int64_t));
